@@ -70,6 +70,19 @@ function initFilters(rows) {
     const el = document.getElementById(id);
     el.addEventListener("change", applyFiltersAndRender);
   });
+
+  // Clear all filters button
+  document.getElementById("clearFiltersBtn").addEventListener("click", clearAllFilters);
+}
+
+function clearAllFilters() {
+  document.getElementById("filterCountry").selectedIndex = 0;
+  document.getElementById("filterBusinessTitle").selectedIndex = 0;
+  document.getElementById("filterIsManager").selectedIndex = 0;
+  document.getElementById("filterZone").selectedIndex = 0;
+  document.getElementById("filterRegion").selectedIndex = 0;
+  document.getElementById("filterEmployeeStatus").selectedIndex = 0;
+  applyFiltersAndRender();
 }
 
 function populateSelect(id, values, allLabel) {
@@ -122,54 +135,69 @@ function filterRows(rows) {
 }
 
 function processRows(rows, allData) {
-  // Use allData for global counts, rows for filtered counts
-  const sourceRows = allData || rows;
+  // Use filtered rows for all calculations so indicators reflect filter selections
   
   // 1. Total Employees in Nobel Biocare Sales Teams: Active OR Active - No plan (column EMPLOYEE STATUS)
-  // This counts from ALL data, not filtered
-  const totalSalesTeam = sourceRows.filter((r) => {
+  const totalSalesTeam = rows.filter((r) => {
     const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
     return status === "active" || status === "active - no plan";
   }).length;
 
   // 2. Employees considered in CST: Only "Active" status (column EMPLOYEE STATUS)
-  // This counts from ALL data, not filtered
-  const employeesInCST = sourceRows.filter((r) => {
+  const employeesInCST = rows.filter((r) => {
     const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
     return status === "active";
   }).length;
 
-  // 3. CST Completed: Has a date in ACTUAL column
+  // 3. CST Completed: "Active" employees with a date in ACTUAL column
   const cstCompleted = rows.filter((r) => {
+    const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
     const actual = (r["ACTUAL"] || "").toString().trim();
-    return actual !== "";
+    return status === "active" && actual !== "";
   }).length;
 
-  // 4. CST Pending: Has PLAN date but ACTUAL is empty
+  // 4. CST Pending: "Active" employees with ACTUAL empty
   const cstPending = rows.filter((r) => {
-    const plan = (r["PLAN"] || "").toString().trim();
+    const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
     const actual = (r["ACTUAL"] || "").toString().trim();
-    return plan !== "" && actual === "";
+    return status === "active" && actual === "";
   }).length;
 
-  const mscCompleted = rows.filter((r) => !!r["MSC"]).length;
+  // MSC Completed: Is Manager = "Yes" AND MSC has a date
+  const mscCompleted = rows.filter((r) => {
+    const isManager = (r["Is Manager"] || "").toString().trim().toLowerCase();
+    const msc = (r["MSC"] || "").toString().trim();
+    return isManager === "yes" && msc !== "";
+  }).length;
+  
+  // Total managers for MSC percentage
+  const totalManagers = rows.filter((r) => {
+    const isManager = (r["Is Manager"] || "").toString().trim().toLowerCase();
+    return isManager === "yes";
+  }).length;
 
   const cstPct = employeesInCST ? (cstCompleted / employeesInCST) * 100 : 0;
-  const mscPct = employeesInCST ? (mscCompleted / employeesInCST) * 100 : 0;
+  const mscPct = totalManagers ? (mscCompleted / totalManagers) * 100 : 0;
 
-  // Aggregate by country
+  // Aggregate by country - using Employees in CST (Active) vs CST Completed
   const countryMap = new Map();
 
   rows.forEach((r) => {
     const country = (r["Country"] || "").toString().trim();
     if (!country) return;
+    
+    const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
+    const actual = (r["ACTUAL"] || "").toString().trim();
+    
+    // Only count Active employees (those considered in CST)
+    if (status !== "active") return;
 
     if (!countryMap.has(country)) {
       countryMap.set(country, { country, total: 0, completed: 0 });
     }
     const entry = countryMap.get(country);
     entry.total += 1;
-    if (r["ACTUAL"]) {
+    if (actual !== "") {
       entry.completed += 1;
     }
   });
@@ -188,6 +216,7 @@ function processRows(rows, allData) {
     cstCompleted,
     cstPending,
     mscCompleted,
+    totalManagers,
     cstPct,
     mscPct,
     countries,
@@ -218,7 +247,7 @@ function renderDashboard(data) {
     "mscGaugeLabel",
     data.mscPct,
     data.mscCompleted,
-    data.employeesInCST
+    data.totalManagers
   );
 
   // Bar chart
@@ -244,12 +273,12 @@ function renderGauge(canvasId, labelId, pct, completed, total) {
   const chart = new Chart(ctx, {
     type: "doughnut",
     data: {
-      labels: ["Completed", "Remaining"],
+      labels: ["Red", "Orange", "Yellow", "Green"],
       datasets: [
         {
-          data: [clamped, 100 - clamped],
+          data: [25, 25, 25, 25],
           borderWidth: 0,
-          backgroundColor: ["#b91c1c", "#e5e7eb"],
+          backgroundColor: ["#dc2626", "#f97316", "#facc15", "#22c55e"],
           circumference: 180,
           rotation: 270,
           cutout: "70%",
@@ -267,6 +296,37 @@ function renderGauge(canvasId, labelId, pct, completed, total) {
         },
       },
     },
+    plugins: [{
+      id: 'gaugeNeedle',
+      afterDatasetDraw(chart) {
+        const { ctx, chartArea } = chart;
+        const centerX = (chartArea.left + chartArea.right) / 2;
+        const centerY = chartArea.bottom;
+        const outerRadius = Math.min(chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+        
+        const angle = Math.PI + (clamped / 100) * Math.PI;
+        const needleLength = outerRadius * 0.28;
+        const baseOffsetY = -65;
+        
+        ctx.save();
+        ctx.translate(centerX, centerY + baseOffsetY);
+        ctx.rotate(angle);
+        
+        ctx.beginPath();
+        ctx.moveTo(0, -3);
+        ctx.lineTo(needleLength, 0);
+        ctx.lineTo(0, 3);
+        ctx.fillStyle = "#1f2937";
+        ctx.fill();
+        
+        ctx.beginPath();
+        ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        ctx.fillStyle = "#1f2937";
+        ctx.fill();
+        
+        ctx.restore();
+      }
+    }]
   });
 
   if (canvasId === "cstGauge") {
@@ -276,9 +336,7 @@ function renderGauge(canvasId, labelId, pct, completed, total) {
   }
 
   const labelEl = document.getElementById(labelId);
-  const pctText =
-    total > 0 ? `${completed} | ${clamped.toFixed(1)}%` : "0 | 0.0%";
-  labelEl.textContent = pctText;
+  labelEl.innerHTML = `<span class="gauge-number">${completed}</span><span class="gauge-percent">${clamped.toFixed(1)}%</span>`;
 }
 
 // Bar chart

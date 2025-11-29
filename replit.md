@@ -69,6 +69,13 @@ This script runs on Google's infrastructure, not on Replit.
 Configured as a **static deployment** - all HTML, CSS, and JavaScript files are served directly. The site connects to the external Google Apps Script API for data.
 
 ## Recent Changes
+- **2025-11-29**: Filter-responsive indicators and map improvements
+  - Indicators now reflect filtered data (when filtering by country, all metrics update accordingly)
+  - Gauge needle base repositioned above the numbers to prevent overlap
+  - Updated GeoJSON to Natural Earth 50m resolution for accurate country boundaries
+  - Tile styling: centered content, larger text (16px labels, 56px numbers), white labels, cyan numbers
+  - Reduced tile height to 155px for more compact display
+
 - **2025-11-29**: Header and layout updates
   - Updated logo to official Nobel Biocare logo image
   - Changed title to "Consultative Sales Training Dashboard" (centered)

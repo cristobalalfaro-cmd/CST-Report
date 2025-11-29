@@ -50,6 +50,7 @@
         <label for="filterEmployeeStatus">Employee Status</label>
         <select id="filterEmployeeStatus"></select>
       </div>
+      <button id="clearFiltersBtn" class="clear-filters-btn">Remove all filters</button>
     </section>
 
     <main class="dashboard">
@@ -78,13 +79,17 @@
         <div class="gauge-container">
           <div class="gauge-block">
             <h3>Completed CST</h3>
-            <canvas id="cstGauge"></canvas>
-            <div id="cstGaugeLabel" class="gauge-label">-</div>
+            <div class="gauge-wrapper">
+              <canvas id="cstGauge"></canvas>
+              <div id="cstGaugeLabel" class="gauge-label">-</div>
+            </div>
           </div>
           <div class="gauge-block">
             <h3>Completed MSC</h3>
-            <canvas id="mscGauge"></canvas>
-            <div id="mscGaugeLabel" class="gauge-label">-</div>
+            <div class="gauge-wrapper">
+              <canvas id="mscGauge"></canvas>
+              <div id="mscGaugeLabel" class="gauge-label">-</div>
+            </div>
           </div>
         </div>
       </section>
