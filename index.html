@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Nobel Biocare · CST Dashboard</title>
+  <title>Consultative Sales Training Dashboard</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="styles.css" />
 
@@ -20,10 +20,8 @@
 <body>
   <div class="page">
     <header class="header">
-      <div class="logo">
-        <span class="logo-mark">N</span>
-        <span class="logo-text">Nobel Biocare</span>
-      </div>
+      <img src="logo.png" alt="Nobel Biocare" class="logo-img" />
+      <h1 class="header-title">Consultative Sales Training Dashboard</h1>
     </header>
 
     <!-- Filters -->
@@ -57,17 +55,22 @@
     <main class="dashboard">
       <!-- Top summary tiles -->
       <section class="summary">
-        <div class="tile tile-large">
-          <div class="tile-label">Employees considered<br/>in CST</div>
-          <div id="employeesTotal" class="tile-value">-</div>
+        <div class="tile tile-small">
+          <div class="tile-label">Total Employees in<br/>Nobel Biocare Sales Teams</div>
+          <div id="totalSalesTeam" class="tile-value">-</div>
         </div>
 
-        <div class="tile tile-medium">
+        <div class="tile tile-small">
+          <div class="tile-label">Employees considered<br/>in CST</div>
+          <div id="employeesInCST" class="tile-value">-</div>
+        </div>
+
+        <div class="tile tile-small">
           <div class="tile-label">CST Completed</div>
           <div id="cstCompleted" class="tile-value">-</div>
         </div>
 
-        <div class="tile tile-medium">
+        <div class="tile tile-small">
           <div class="tile-label">CST Pending</div>
           <div id="cstPending" class="tile-value">-</div>
         </div>
@@ -106,6 +109,7 @@
   </div>
 
   <script src="config.js"></script>
+  <script src="countries-geo.js"></script>
 
   <!-- Leaflet JS -->
   <script

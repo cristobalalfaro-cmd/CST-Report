@@ -91,7 +91,7 @@ function populateSelect(id, values, allLabel) {
 
 function applyFiltersAndRender() {
   const filtered = filterRows(allRows);
-  const processed = processRows(filtered);
+  const processed = processRows(filtered, allRows);
   renderDashboard(processed);
 }
 
@@ -121,15 +121,41 @@ function filterRows(rows) {
   });
 }
 
-function processRows(rows) {
-  const totalEmployees = rows.length;
+function processRows(rows, allData) {
+  // Use allData for global counts, rows for filtered counts
+  const sourceRows = allData || rows;
+  
+  // 1. Total Employees in Nobel Biocare Sales Teams: Active OR Active - No plan (column EMPLOYEE STATUS)
+  // This counts from ALL data, not filtered
+  const totalSalesTeam = sourceRows.filter((r) => {
+    const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
+    return status === "active" || status === "active - no plan";
+  }).length;
 
-  const cstCompleted = rows.filter((r) => !!r["ACTUAL"]).length;
-  const cstPending = totalEmployees - cstCompleted;
+  // 2. Employees considered in CST: Only "Active" status (column EMPLOYEE STATUS)
+  // This counts from ALL data, not filtered
+  const employeesInCST = sourceRows.filter((r) => {
+    const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
+    return status === "active";
+  }).length;
+
+  // 3. CST Completed: Has a date in ACTUAL column
+  const cstCompleted = rows.filter((r) => {
+    const actual = (r["ACTUAL"] || "").toString().trim();
+    return actual !== "";
+  }).length;
+
+  // 4. CST Pending: Has PLAN date but ACTUAL is empty
+  const cstPending = rows.filter((r) => {
+    const plan = (r["PLAN"] || "").toString().trim();
+    const actual = (r["ACTUAL"] || "").toString().trim();
+    return plan !== "" && actual === "";
+  }).length;
+
   const mscCompleted = rows.filter((r) => !!r["MSC"]).length;
 
-  const cstPct = totalEmployees ? (cstCompleted / totalEmployees) * 100 : 0;
-  const mscPct = totalEmployees ? (mscCompleted / totalEmployees) * 100 : 0;
+  const cstPct = employeesInCST ? (cstCompleted / employeesInCST) * 100 : 0;
+  const mscPct = employeesInCST ? (mscCompleted / employeesInCST) * 100 : 0;
 
   // Aggregate by country
   const countryMap = new Map();
@@ -157,7 +183,8 @@ function processRows(rows) {
   });
 
   return {
-    totalEmployees,
+    totalSalesTeam,
+    employeesInCST,
     cstCompleted,
     cstPending,
     mscCompleted,
@@ -169,8 +196,10 @@ function processRows(rows) {
 
 function renderDashboard(data) {
   // Update tiles
-  document.getElementById("employeesTotal").textContent =
-    data.totalEmployees.toString();
+  document.getElementById("totalSalesTeam").textContent =
+    data.totalSalesTeam.toString();
+  document.getElementById("employeesInCST").textContent =
+    data.employeesInCST.toString();
   document.getElementById("cstCompleted").textContent =
     data.cstCompleted.toString();
   document.getElementById("cstPending").textContent =
@@ -182,14 +211,14 @@ function renderDashboard(data) {
     "cstGaugeLabel",
     data.cstPct,
     data.cstCompleted,
-    data.totalEmployees
+    data.employeesInCST
   );
   renderGauge(
     "mscGauge",
     "mscGaugeLabel",
     data.mscPct,
     data.mscCompleted,
-    data.totalEmployees
+    data.employeesInCST
   );
 
   // Bar chart
@@ -310,73 +339,156 @@ function renderBarChart(countries) {
   });
 }
 
-// Simple coordinates for European countries (center approx)
-const COUNTRY_COORDS = {
-  France: [46.2276, 2.2137],
-  Germany: [51.1657, 10.4515],
-  Spain: [40.4637, -3.7492],
-  Italy: [41.8719, 12.5674],
-  Belgium: [50.8503, 4.3517],
-  "United Kingdom": [55.3781, -3.436],
-  UK: [55.3781, -3.436],
-  Poland: [51.9194, 19.1451],
-  Portugal: [39.3999, -8.2245],
-  Austria: [47.5162, 14.5501],
-  Switzerland: [46.8182, 8.2275],
-  Netherlands: [52.1326, 5.2913],
-  Sweden: [60.1282, 18.6435],
-  Norway: [60.472, 8.4689],
-  Denmark: [56.2639, 9.5018],
-  Finland: [61.9241, 25.7482],
-  Ireland: [53.1424, -7.6921],
-  Lithuania: [55.1694, 23.8813],
-  Hungary: [47.1625, 19.5033],
-};
-
 let leafletMap;
+let geoJsonLayer;
+let labelMarkers = [];
 
 function renderMap(countries) {
   const mapDiv = document.getElementById("map");
 
   if (!leafletMap) {
-    leafletMap = L.map(mapDiv).setView([54.526, 15.2551], 4);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    leafletMap = L.map(mapDiv, {
+      zoomControl: true,
+      scrollWheelZoom: true
+    }).setView([52.0, 10.0], 4);
+    
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       maxZoom: 8,
-      attribution: "&copy; OpenStreetMap contributors",
+      minZoom: 3,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(leafletMap);
   }
 
-  // Clear existing layers except base
-  leafletMap.eachLayer((layer) => {
-    if (!(layer instanceof L.TileLayer)) {
-      leafletMap.removeLayer(layer);
+  if (geoJsonLayer) {
+    leafletMap.removeLayer(geoJsonLayer);
+  }
+  labelMarkers.forEach(marker => leafletMap.removeLayer(marker));
+  labelMarkers = [];
+
+  const countryDataMap = new Map();
+  countries.forEach(c => {
+    const name = c.country;
+    countryDataMap.set(name, c);
+    
+    if (name === "Czechia") {
+      countryDataMap.set("Czech Republic", c);
+    }
+    if (name === "Czech Republic") {
+      countryDataMap.set("Czechia", c);
+    }
+    if (name === "United Kingdom" || name === "UK") {
+      countryDataMap.set("UK", c);
+      countryDataMap.set("United Kingdom", c);
+    }
+    
+    const alias = COUNTRY_NAME_ALIASES[name];
+    if (alias) {
+      countryDataMap.set(alias, c);
     }
   });
 
-  countries.forEach((c) => {
-    const coords = COUNTRY_COORDS[c.country];
+  geoJsonLayer = L.geoJSON(EUROPE_GEOJSON, {
+    style: function(feature) {
+      const countryName = feature.properties.name;
+      const data = countryDataMap.get(countryName);
+      
+      if (data) {
+        const color = pctToColor(data.pct || 0);
+        return {
+          fillColor: color,
+          fillOpacity: 0.75,
+          color: "#1a1a2e",
+          weight: 1.5
+        };
+      } else {
+        return {
+          fillColor: "#374151",
+          fillOpacity: 0.5,
+          color: "#1a1a2e",
+          weight: 1
+        };
+      }
+    },
+    onEachFeature: function(feature, layer) {
+      const countryName = feature.properties.name;
+      const data = countryDataMap.get(countryName);
+      
+      if (data) {
+        const pctLabel = data.pct ? data.pct.toFixed(1) : "0.0";
+        layer.bindPopup(
+          `<strong>${data.country}</strong><br/>
+           Completion: ${pctLabel}%<br/>
+           ${data.completed} of ${data.total}`
+        );
+      }
+    }
+  }).addTo(leafletMap);
+
+  countries.forEach(c => {
+    let countryName = c.country;
+    if (COUNTRY_NAME_ALIASES[countryName]) {
+      countryName = COUNTRY_NAME_ALIASES[countryName];
+    }
+    
+    const coords = COUNTRY_LABEL_COORDS[countryName] || COUNTRY_LABEL_COORDS[c.country];
     if (!coords) return;
 
-    const color = pctToColor(c.pct || 0);
-
-    const marker = L.circleMarker(coords, {
-      radius: 10,
-      color,
-      fillColor: color,
-      fillOpacity: 0.8,
-      weight: 1,
+    const displayName = getDisplayName(c.country);
+    
+    const labelIcon = L.divIcon({
+      className: 'country-label',
+      html: `<span>${displayName}</span>`,
+      iconSize: [100, 20],
+      iconAnchor: [50, 10]
     });
 
-    const pctLabel = c.pct ? c.pct.toFixed(1) : "0.0";
-
-    marker.bindPopup(
-      `<strong>${c.country}</strong><br/>
-       Completion: ${pctLabel}%<br/>
-       ${c.completed} of ${c.total}`
-    );
-
-    marker.addTo(leafletMap);
+    const marker = L.marker(coords, {
+      icon: labelIcon,
+      interactive: false
+    }).addTo(leafletMap);
+    
+    labelMarkers.push(marker);
   });
+}
+
+function getDisplayName(name) {
+  const spanishNames = {
+    "France": "Francia",
+    "Germany": "Alemania",
+    "Spain": "España",
+    "Italy": "Italia",
+    "Belgium": "Bélgica",
+    "United Kingdom": "Reino Unido",
+    "UK": "Reino Unido",
+    "Poland": "Polonia",
+    "Portugal": "Portugal",
+    "Austria": "Austria",
+    "Switzerland": "Suiza",
+    "Netherlands": "Países Bajos",
+    "Sweden": "Suecia",
+    "Norway": "Noruega",
+    "Denmark": "Dinamarca",
+    "Finland": "Finlandia",
+    "Ireland": "Irlanda",
+    "Lithuania": "Lituania",
+    "Hungary": "Hungría",
+    "Czech Republic": "Rep. Checa",
+    "Czechia": "Rep. Checa",
+    "Greece": "Grecia",
+    "Romania": "Rumanía",
+    "Bulgaria": "Bulgaria",
+    "Croatia": "Croacia",
+    "Slovakia": "Eslovaquia",
+    "Slovenia": "Eslovenia",
+    "Latvia": "Letonia",
+    "Estonia": "Estonia",
+    "Serbia": "Serbia",
+    "Ukraine": "Ucrania",
+    "Belarus": "Bielorrusia",
+    "Turkey": "Turquía",
+    "Iceland": "Islandia"
+  };
+  return spanishNames[name] || name;
 }
 
 // Simple color scale: red -> yellow -> green
