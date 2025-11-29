@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Nobel Biocare · CST Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div class="logo">
+        <span class="logo-mark">N</span>
+        <span class="logo-text">Nobel Biocare</span>
+      </div>
+    </header>
+
+    <!-- Filters -->
+    <section class="filters">
+      <div class="filter">
+        <label for="filterCountry">Country</label>
+        <select id="filterCountry"></select>
+      </div>
+      <div class="filter">
+        <label for="filterBusinessTitle">Business Title</label>
+        <select id="filterBusinessTitle"></select>
+      </div>
+      <div class="filter">
+        <label for="filterIsManager">Is Manager</label>
+        <select id="filterIsManager"></select>
+      </div>
+      <div class="filter">
+        <label for="filterZone">Zone</label>
+        <select id="filterZone"></select>
+      </div>
+      <div class="filter">
+        <label for="filterRegion">Region</label>
+        <select id="filterRegion"></select>
+      </div>
+      <div class="filter">
+        <label for="filterEmployeeStatus">Employee Status</label>
+        <select id="filterEmployeeStatus"></select>
+      </div>
+    </section>
+
+    <main class="dashboard">
+      <!-- Top summary tiles -->
+      <section class="summary">
+        <div class="tile tile-large">
+          <div class="tile-label">Employees considered<br/>in CST</div>
+          <div id="employeesTotal" class="tile-value">-</div>
+        </div>
+
+        <div class="tile tile-medium">
+          <div class="tile-label">CST Completed</div>
+          <div id="cstCompleted" class="tile-value">-</div>
+        </div>
+
+        <div class="tile tile-medium">
+          <div class="tile-label">CST Pending</div>
+          <div id="cstPending" class="tile-value">-</div>
+        </div>
+
+        <div class="gauge-container">
+          <div class="gauge-block">
+            <h3>Completed CST</h3>
+            <canvas id="cstGauge"></canvas>
+            <div id="cstGaugeLabel" class="gauge-label">-</div>
+          </div>
+          <div class="gauge-block">
+            <h3>Completed MSC</h3>
+            <canvas id="mscGauge"></canvas>
+            <div id="mscGaugeLabel" class="gauge-label">-</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bottom section: bar chart + map -->
+      <section class="bottom">
+        <div class="card">
+          <h3>Complete CST by Country</h3>
+          <p class="card-subtitle">
+            <span class="legend-dot legend-total"></span> Total Employees
+            <span class="legend-dot legend-completed"></span> Completed CST
+          </p>
+          <canvas id="countryBarChart"></canvas>
+        </div>
+
+        <div class="card">
+          <h3>% Completion CST by Country</h3>
+          <div id="map" class="map"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="config.js"></script>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script src="app.js"></script>
+</body>
+</html>
