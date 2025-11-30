@@ -5,14 +5,31 @@
  * Deploy as Web App and use the resulting URL in config.js (API_URL).
  */
 
-const SHEET_NAME = "Hoja1"; // TODO: change to your sheet name if different
+// Main CST data sheet and Coaching Forms sheet
+const SHEETS = {
+  cst: "Hoja1",            // main CST dataset
+  coaching: "Coaching Forms", // managers feedback forms
+};
 
 function doGet(e) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const sheet = ss.getSheetByName(SHEET_NAME);
+
+  // Default to CST sheet; allow ?sheet=coaching or ?sheet=<sheetName>
+  let sheetName = SHEETS.cst;
+  if (e && e.parameter && e.parameter.sheet) {
+    const key = e.parameter.sheet;
+    if (SHEETS[key]) {
+      sheetName = SHEETS[key];
+    } else {
+      // If a direct sheet name is passed, try to use it
+      sheetName = key;
+    }
+  }
+
+  const sheet = ss.getSheetByName(sheetName);
   if (!sheet) {
     return ContentService.createTextOutput(
-      JSON.stringify({ error: "Sheet not found: " + SHEET_NAME })
+      JSON.stringify({ error: "Sheet not found: " + sheetName })
     ).setMimeType(ContentService.MimeType.JSON);
   }
 

@@ -19,12 +19,21 @@
 </head>
 <body>
   <div class="page">
+
     <header class="header">
-      <img src="logo.png" alt="Nobel Biocare" class="logo-img" />
-      <h1 class="header-title">Consultative Sales Training Dashboard</h1>
+      <div class="header-left">
+        <img src="logo.png" alt="Nobel Biocare" class="logo-img" />
+        <h1 class="header-title">Consultative Sales Training Dashboard</h1>
+      </div>
+      <div class="header-right nav-tabs">
+        <button class="nav-btn nav-btn-active" data-view="cst">CST Report</button>
+        <button class="nav-btn" data-view="feedback">Managers Feedback</button>
+        <button class="nav-btn" data-view="bowler">Bowler</button>
+      </div>
     </header>
 
-    <!-- Filters -->
+    <section id="view-cst" class="view view-active">
+<!-- Filters -->
     <section class="filters">
       <div class="filter">
         <label for="filterCountry">Country</label>
@@ -111,6 +120,100 @@
         </div>
       </section>
     </main>
+
+    </section>
+
+    <section id="view-feedback" class="view">
+      <main class="dashboard dashboard-feedback">
+        <section class="summary summary-feedback">
+          <div class="tile tile-small">
+            <div class="tile-label">N° Feedbacks by Country</div>
+            <div id="fbCountries" class="tile-value">-</div>
+          </div>
+          <div class="tile tile-small">
+            <div class="tile-label">N° of Managers using<br/>Feedback Forms</div>
+            <div id="fbManagers" class="tile-value">-</div>
+          </div>
+          <div class="tile tile-small">
+            <div class="tile-label">N° of Employees w/CST Feedback</div>
+            <div id="fbEmployees" class="tile-value">-</div>
+          </div>
+        </section>
+      </main>
+    </section>
+
+    <section id="view-bowler" class="view">
+      <div class="bowler-card">
+        <h2 class="bowler-title">Bowler 2025</h2>
+        <table class="bowler-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Jan</th>
+              <th>Feb</th>
+              <th>Mar</th>
+              <th>Apr</th>
+              <th>May</th>
+              <th>Jun</th>
+              <th>Jul</th>
+              <th>Aug</th>
+              <th>Sep</th>
+              <th>Oct</th>
+              <th>Nov</th>
+              <th>Dec</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>PY</th>
+              <td id="bowler-py-Jan"></td>
+              <td id="bowler-py-Feb"></td>
+              <td id="bowler-py-Mar"></td>
+              <td id="bowler-py-Apr"></td>
+              <td id="bowler-py-May"></td>
+              <td id="bowler-py-Jun"></td>
+              <td id="bowler-py-Jul"></td>
+              <td id="bowler-py-Aug"></td>
+              <td id="bowler-py-Sep"></td>
+              <td id="bowler-py-Oct"></td>
+              <td id="bowler-py-Nov"></td>
+              <td id="bowler-py-Dec"></td>
+            </tr>
+            <tr>
+              <th>PD</th>
+              <td id="bowler-pd-Jan"></td>
+              <td id="bowler-pd-Feb"></td>
+              <td id="bowler-pd-Mar"></td>
+              <td id="bowler-pd-Apr"></td>
+              <td id="bowler-pd-May"></td>
+              <td id="bowler-pd-Jun"></td>
+              <td id="bowler-pd-Jul"></td>
+              <td id="bowler-pd-Aug"></td>
+              <td id="bowler-pd-Sep"></td>
+              <td id="bowler-pd-Oct"></td>
+              <td id="bowler-pd-Nov"></td>
+              <td id="bowler-pd-Dec"></td>
+            </tr>
+            <tr>
+              <th>ACT</th>
+              <td id="bowler-act-Jan"></td>
+              <td id="bowler-act-Feb"></td>
+              <td id="bowler-act-Mar"></td>
+              <td id="bowler-act-Apr"></td>
+              <td id="bowler-act-May"></td>
+              <td id="bowler-act-Jun"></td>
+              <td id="bowler-act-Jul"></td>
+              <td id="bowler-act-Aug"></td>
+              <td id="bowler-act-Sep"></td>
+              <td id="bowler-act-Oct"></td>
+              <td id="bowler-act-Nov"></td>
+              <td id="bowler-act-Dec"></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
   </div>
 
   <script src="config.js"></script>

@@ -2,14 +2,51 @@ let barChart;
 let cstGaugeChart;
 let mscGaugeChart;
 let allRows = [];
+let coachingRows = [];
+let bowlerComputed = false;
+let feedbackComputed = false;
 
 document.addEventListener("DOMContentLoaded", () => {
   if (!API_URL) {
     console.error("API_URL is not defined. Please set it in config.js");
     return;
   }
+  setupViewTabs();
   loadData();
 });
+
+
+function setupViewTabs() {
+  const buttons = document.querySelectorAll(".nav-btn");
+  const views = document.querySelectorAll(".view");
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = btn.dataset.view;
+
+      // Toggle button active state
+      buttons.forEach((b) => b.classList.remove("nav-btn-active"));
+      btn.classList.add("nav-btn-active");
+
+      // Toggle views
+      views.forEach((v) => {
+        if (v.id === `view-${target}`) {
+          v.classList.add("view-active");
+        } else {
+          v.classList.remove("view-active");
+        }
+      });
+
+      // Lazy init for extra views
+      if (target === "feedback" && !feedbackComputed) {
+        loadCoachingData();
+      }
+      if (target === "bowler" && !bowlerComputed && allRows.length) {
+        buildBowler(allRows);
+      }
+    });
+  });
+}
 
 async function loadData() {
   try {
@@ -20,6 +57,9 @@ async function loadData() {
 
     initFilters(rows);
     applyFiltersAndRender();
+
+    // Precompute bowler data if user opens that view later
+    // (actual DOM update happens on first visit)
   } catch (err) {
     console.error("Error loading data:", err);
   }
@@ -555,3 +595,122 @@ function pctToColor(pct) {
   if (pct <= 70) return "#facc15"; // yellow
   return "#22c55e"; // green
 }
+
+
+// ===== Managers Feedback View =====
+
+async function loadCoachingData() {
+  try {
+    const url = API_URL.includes("?")
+      ? API_URL + "&sheet=coaching"
+      : API_URL + "?sheet=coaching";
+
+    const response = await fetch(url);
+    const json = await response.json();
+    coachingRows = json.data || [];
+
+    const kpis = computeFeedbackKpis(coachingRows);
+    renderFeedbackKpis(kpis);
+    feedbackComputed = true;
+  } catch (err) {
+    console.error("Error loading coaching data:", err);
+  }
+}
+
+function computeFeedbackKpis(rows) {
+  const countries = new Set();
+  const managerEmails = new Set();
+  const employeeEmails = new Set();
+
+  rows.forEach((r) => {
+    const country = (r["country"] || r["Country"] || "").toString().trim();
+    if (country) countries.add(country);
+
+    const managerEmail = (r["Managers email"] || r["Manager Email"] || "").toString().trim();
+    if (managerEmail) managerEmails.add(managerEmail);
+
+    const evalEmail = (r["Evaluated email"] || r["Evaluated Email"] || "").toString().trim();
+    if (evalEmail) employeeEmails.add(evalEmail);
+  });
+
+  return {
+    feedbackCountries: countries.size,
+    managersUsingForms: managerEmails.size,
+    employeesWithFeedback: employeeEmails.size,
+  };
+}
+
+function renderFeedbackKpis(kpis) {
+  document.getElementById("fbCountries").textContent =
+    kpis.feedbackCountries.toString();
+  document.getElementById("fbManagers").textContent =
+    kpis.managersUsingForms.toString();
+  document.getElementById("fbEmployees").textContent =
+    kpis.employeesWithFeedback.toString();
+}
+
+// ===== Bowler View =====
+
+const BOWLER_MONTH_KEYS = [
+  "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"
+];
+
+// PY row: keep values as in existing reference (adjust these numbers as needed)
+const BOWLER_PY_2025 = {
+  Jan: 0,
+  Feb: 0,
+  Mar: 0,
+  Apr: 1,
+  May: 0,
+  Jun: 0,
+  Jul: 7,
+  Aug: 0,
+  Sep: 0,
+  Oct: 1,
+  Nov: 0,
+  Dec: 8,
+};
+
+function buildBowler(rows) {
+  const pdCounts = {};
+  const actCounts = {};
+  BOWLER_MONTH_KEYS.forEach((m) => {
+    pdCounts[m] = 0;
+    actCounts[m] = 0;
+  });
+
+  rows.forEach((r) => {
+    const planRaw = r["PLAN"];
+    const actualRaw = r["ACTUAL"];
+
+    if (planRaw) {
+      const d = new Date(planRaw);
+      if (!isNaN(d.getTime()) && d.getFullYear() === 2025) {
+        const key = BOWLER_MONTH_KEYS[d.getMonth()];
+        if (key) pdCounts[key] += 1;
+      }
+    }
+
+    if (actualRaw) {
+      const d2 = new Date(actualRaw);
+      if (!isNaN(d2.getTime()) && d2.getFullYear() === 2025) {
+        const key2 = BOWLER_MONTH_KEYS[d2.getMonth()];
+        if (key2) actCounts[key2] += 1;
+      }
+    }
+  });
+
+  // Write into table
+  BOWLER_MONTH_KEYS.forEach((m) => {
+    const pyCell = document.getElementById(`bowler-py-${m}`);
+    const pdCell = document.getElementById(`bowler-pd-${m}`);
+    const actCell = document.getElementById(`bowler-act-${m}`);
+
+    if (pyCell) pyCell.textContent = BOWLER_PY_2025[m] || "";
+    if (pdCell) pdCell.textContent = pdCounts[m] ? pdCounts[m].toString() : "";
+    if (actCell) actCell.textContent = actCounts[m] ? actCounts[m].toString() : "";
+  });
+
+  bowlerComputed = true;
+}
+
