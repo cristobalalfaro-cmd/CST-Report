@@ -124,25 +124,62 @@
     </section>
 
     <section id="view-feedback" class="view">
+      <section class="filters filters-feedback">
+        <div class="filter">
+          <label for="filterFeedbackCountry">Country</label>
+          <select id="filterFeedbackCountry"></select>
+        </div>
+        <button id="clearFeedbackFiltersBtn" class="clear-filters-btn">Remove all filters</button>
+      </section>
       <main class="dashboard dashboard-feedback">
         <section class="summary summary-feedback">
           <div class="tile tile-small">
-            <div class="tile-label">N° Feedbacks by Country</div>
-            <div id="fbCountries" class="tile-value">-</div>
+            <div class="tile-label">N° Employees Considered in CST</div>
+            <div id="fbEmployeesInCST" class="tile-value">-</div>
           </div>
           <div class="tile tile-small">
-            <div class="tile-label">N° of Managers using<br/>Feedback Forms</div>
+            <div class="tile-label">N° Managers</div>
+            <div id="fbTotalManagers" class="tile-value">-</div>
+          </div>
+          <div class="tile tile-small">
+            <div class="tile-label">N° Feedbacks</div>
+            <div id="fbFeedbacks" class="tile-value">-</div>
+          </div>
+          <div class="tile tile-small">
+            <div class="tile-label">N° of Managers doing<br/>CST Coaching</div>
             <div id="fbManagers" class="tile-value">-</div>
           </div>
           <div class="tile tile-small">
             <div class="tile-label">N° of Employees w/CST Feedback</div>
             <div id="fbEmployees" class="tile-value">-</div>
           </div>
+          <div class="gauge-container gauge-container-feedback">
+            <div class="gauge-block">
+              <h3>% Employees w/Feedback</h3>
+              <div class="gauge-wrapper">
+                <canvas id="feedbackGauge"></canvas>
+                <div id="feedbackGaugeLabel" class="gauge-label">-</div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="bottom bottom-feedback">
+          <div class="card card-feedback-map">
+            <h3>% Employees w/CST Feedback by Country</h3>
+            <div id="feedbackMap" class="map"></div>
+          </div>
         </section>
       </main>
     </section>
 
     <section id="view-bowler" class="view">
+      <section class="filters filters-bowler">
+        <div class="filter">
+          <label for="filterBowlerCountry">Country</label>
+          <select id="filterBowlerCountry"></select>
+        </div>
+        <button id="clearBowlerFiltersBtn" class="clear-filters-btn">Remove all filters</button>
+      </section>
       <div class="bowler-card">
         <h2 class="bowler-title">Bowler 2025</h2>
         <table class="bowler-table">
@@ -208,6 +245,21 @@
               <td id="bowler-act-Oct"></td>
               <td id="bowler-act-Nov"></td>
               <td id="bowler-act-Dec"></td>
+            </tr>
+            <tr class="bowler-pct-row">
+              <th>%</th>
+              <td id="bowler-pct-Jan"></td>
+              <td id="bowler-pct-Feb"></td>
+              <td id="bowler-pct-Mar"></td>
+              <td id="bowler-pct-Apr"></td>
+              <td id="bowler-pct-May"></td>
+              <td id="bowler-pct-Jun"></td>
+              <td id="bowler-pct-Jul"></td>
+              <td id="bowler-pct-Aug"></td>
+              <td id="bowler-pct-Sep"></td>
+              <td id="bowler-pct-Oct"></td>
+              <td id="bowler-pct-Nov"></td>
+              <td id="bowler-pct-Dec"></td>
             </tr>
           </tbody>
         </table>

@@ -177,10 +177,33 @@ function filterRows(rows) {
 function processRows(rows, allData) {
   // Use filtered rows for all calculations so indicators reflect filter selections
   
-  // 1. Total Employees in Nobel Biocare Sales Teams: Active OR Active - No plan (column EMPLOYEE STATUS)
-  const totalSalesTeam = rows.filter((r) => {
+  // Get current filter values (except Employee Status) to apply to allData for Total Employees
+  const country = document.getElementById("filterCountry").value;
+  const businessTitle = document.getElementById("filterBusinessTitle").value;
+  const isManager = document.getElementById("filterIsManager").value;
+  const zone = document.getElementById("filterZone").value;
+  const region = document.getElementById("filterRegion").value;
+  
+  // 1. Total Employees in Nobel Biocare Sales Teams: Active OR Active - No plan
+  // This KPI ignores Employee Status filter to always show both Active and Active - No Plan
+  const totalSalesTeam = allData.filter((r) => {
     const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
-    return status === "active" || status === "active - no plan";
+    const isActiveOrNoPlan = status === "active" || status === "active - no plan";
+    if (!isActiveOrNoPlan) return false;
+    
+    // Apply other filters
+    const match = (fieldVal, filterVal) => {
+      if (filterVal === "__ALL__") return true;
+      return (fieldVal ?? "").toString().trim() === filterVal;
+    };
+    
+    return (
+      match(r["Country"], country) &&
+      match(r["Business Title"], businessTitle) &&
+      match(r["Is Manager"], isManager) &&
+      match(r["Zone"], zone) &&
+      match(r["Region"], region)
+    );
   }).length;
 
   // 2. Employees considered in CST: Only "Active" status (column EMPLOYEE STATUS)
@@ -321,12 +344,13 @@ function renderGauge(canvasId, labelId, pct, completed, total) {
           backgroundColor: ["#dc2626", "#f97316", "#facc15", "#22c55e"],
           circumference: 180,
           rotation: 270,
-          cutout: "70%",
+          cutout: "60%",
         },
       ],
     },
     options: {
       responsive: true,
+      maintainAspectRatio: true,
       plugins: {
         legend: {
           display: false,
@@ -339,28 +363,27 @@ function renderGauge(canvasId, labelId, pct, completed, total) {
     plugins: [{
       id: 'gaugeNeedle',
       afterDatasetDraw(chart) {
-        const { ctx, chartArea } = chart;
-        const centerX = (chartArea.left + chartArea.right) / 2;
-        const centerY = chartArea.bottom;
-        const outerRadius = Math.min(chartArea.right - chartArea.left, chartArea.bottom - chartArea.top);
+        const { ctx, chartArea, width, height } = chart;
+        const centerX = width / 2;
+        const centerY = height - 10;
+        const radius = Math.min(width, height * 2) / 2 - 10;
         
         const angle = Math.PI + (clamped / 100) * Math.PI;
-        const needleLength = outerRadius * 0.28;
-        const baseOffsetY = -65;
+        const needleLength = radius * 0.85;
         
         ctx.save();
-        ctx.translate(centerX, centerY + baseOffsetY);
+        ctx.translate(centerX, centerY);
         ctx.rotate(angle);
         
         ctx.beginPath();
-        ctx.moveTo(0, -3);
+        ctx.moveTo(0, -6);
         ctx.lineTo(needleLength, 0);
-        ctx.lineTo(0, 3);
+        ctx.lineTo(0, 6);
         ctx.fillStyle = "#1f2937";
         ctx.fill();
         
         ctx.beginPath();
-        ctx.arc(0, 0, 5, 0, Math.PI * 2);
+        ctx.arc(0, 0, 8, 0, Math.PI * 2);
         ctx.fillStyle = "#1f2937";
         ctx.fill();
         
@@ -589,15 +612,26 @@ function getDisplayName(name) {
   return spanishNames[name] || name;
 }
 
-// Simple color scale: red -> yellow -> green
+// Color scale for CST Report map: 25% intervals (red -> orange -> yellow -> green)
 function pctToColor(pct) {
-  if (pct <= 40) return "#ef4444"; // red
-  if (pct <= 70) return "#facc15"; // yellow
+  if (pct <= 25) return "#dc2626"; // red
+  if (pct <= 50) return "#f97316"; // orange
+  if (pct <= 75) return "#facc15"; // yellow
   return "#22c55e"; // green
+}
+
+// Color scale for Managers Feedback map: custom intervals
+function pctToColorFeedback(pct) {
+  if (pct === 0) return "#dc2626"; // red (0%)
+  if (pct <= 30) return "#f97316"; // orange (1-30%)
+  if (pct <= 80) return "#facc15"; // yellow (31-80%)
+  return "#22c55e"; // green (over 80%)
 }
 
 
 // ===== Managers Feedback View =====
+
+let feedbackFilterInitialized = false;
 
 async function loadCoachingData() {
   try {
@@ -609,44 +643,376 @@ async function loadCoachingData() {
     const json = await response.json();
     coachingRows = json.data || [];
 
-    const kpis = computeFeedbackKpis(coachingRows);
-    renderFeedbackKpis(kpis);
+    // Initialize feedback country filter from Hoja1 data (allRows)
+    if (!feedbackFilterInitialized && allRows.length) {
+      initFeedbackFilters();
+      feedbackFilterInitialized = true;
+    }
+
+    applyFeedbackFiltersAndRender();
     feedbackComputed = true;
   } catch (err) {
     console.error("Error loading coaching data:", err);
   }
 }
 
-function computeFeedbackKpis(rows) {
+function initFeedbackFilters() {
+  // Get unique countries from Hoja1 (column K = "Country")
   const countries = new Set();
-  const managerEmails = new Set();
-  const employeeEmails = new Set();
-
-  rows.forEach((r) => {
-    const country = (r["country"] || r["Country"] || "").toString().trim();
+  allRows.forEach((r) => {
+    const country = (r["Country"] || "").toString().trim();
     if (country) countries.add(country);
+  });
+  
+  const sortedCountries = Array.from(countries).sort((a, b) => a.localeCompare(b));
+  populateSelect("filterFeedbackCountry", sortedCountries, "All countries");
 
-    const managerEmail = (r["Managers email"] || r["Manager Email"] || "").toString().trim();
-    if (managerEmail) managerEmails.add(managerEmail);
+  // Add change listener
+  document.getElementById("filterFeedbackCountry").addEventListener("change", applyFeedbackFiltersAndRender);
 
-    const evalEmail = (r["Evaluated email"] || r["Evaluated Email"] || "").toString().trim();
-    if (evalEmail) employeeEmails.add(evalEmail);
+  // Clear filter button
+  document.getElementById("clearFeedbackFiltersBtn").addEventListener("click", () => {
+    document.getElementById("filterFeedbackCountry").selectedIndex = 0;
+    applyFeedbackFiltersAndRender();
+  });
+}
+
+function applyFeedbackFiltersAndRender() {
+  const selectedCountry = document.getElementById("filterFeedbackCountry").value;
+  
+  // Filter Hoja1 rows by selected country
+  let filteredHoja1 = allRows;
+  if (selectedCountry !== "__ALL__") {
+    filteredHoja1 = allRows.filter((r) => {
+      const country = (r["Country"] || "").toString().trim();
+      return country === selectedCountry;
+    });
+  }
+
+  const kpis = computeFeedbackKpis(coachingRows, filteredHoja1);
+  renderFeedbackKpis(kpis);
+}
+
+function computeFeedbackKpis(coachingData, hoja1Data) {
+  // N° Employees Considered in CST (same as CST Report - status === "active")
+  let employeesInCST = 0;
+  hoja1Data.forEach((r) => {
+    const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
+    if (status === "active") employeesInCST++;
   });
 
+  // N° Managers (count where "Is Manager" = "Yes" AND status === "active")
+  let totalManagers = 0;
+  hoja1Data.forEach((r) => {
+    const isManager = (r["Is Manager"] || "").toString().trim().toLowerCase();
+    const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
+    if (isManager === "yes" && status === "active") totalManagers++;
+  });
+
+  // Build a map of Hoja1 emails to their info (isManager, country, status)
+  const hoja1EmailMap = new Map();
+  hoja1Data.forEach((r) => {
+    const workEmail = (r["Work Email Address"] || "").toString().trim().toLowerCase();
+    const isManager = (r["Is Manager"] || "").toString().trim().toLowerCase();
+    const country = (r["Country"] || "").toString().trim();
+    const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
+    if (workEmail) {
+      hoja1EmailMap.set(workEmail, { isManager: isManager === "yes", country, status });
+    }
+  });
+
+  // Get ALL unique emails from Coaching Forms (both Manager email and Evaluated email)
+  const allCoachingEmails = new Set();
+  coachingData.forEach((r) => {
+    const managerEmail = (r["Manager email"] || "").toString().trim().toLowerCase();
+    const evaluatedEmail = (r["Evaluated email"] || "").toString().trim().toLowerCase();
+    if (managerEmail) allCoachingEmails.add(managerEmail);
+    if (evaluatedEmail) allCoachingEmails.add(evaluatedEmail);
+  });
+
+  // N° Feedbacks = Count all occurrences of emails in Coaching Forms
+  // that exist in Hoja1 and do NOT have "Is Manager" = "Yes"
+  let totalFeedbacks = 0;
+  coachingData.forEach((r) => {
+    const managerEmail = (r["Manager email"] || "").toString().trim().toLowerCase();
+    const evaluatedEmail = (r["Evaluated email"] || "").toString().trim().toLowerCase();
+    
+    // Count Manager email if exists in Hoja1 and is NOT a manager
+    if (managerEmail && hoja1EmailMap.has(managerEmail) && !hoja1EmailMap.get(managerEmail).isManager) {
+      totalFeedbacks++;
+    }
+    // Count Evaluated email if exists in Hoja1 and is NOT a manager
+    if (evaluatedEmail && hoja1EmailMap.has(evaluatedEmail) && !hoja1EmailMap.get(evaluatedEmail).isManager) {
+      totalFeedbacks++;
+    }
+  });
+
+  // N° of Managers doing CST Coaching
+  // Check if each coaching email exists in Hoja1 and has "Is Manager" = "Yes"
+  const managersDoingCoaching = new Set();
+  allCoachingEmails.forEach((email) => {
+    if (hoja1EmailMap.has(email) && hoja1EmailMap.get(email).isManager === true) {
+      managersDoingCoaching.add(email);
+    }
+  });
+
+  // N° of Employees w/CST Feedback (unique count)
+  // Check if each coaching email exists in Hoja1 and does NOT have "Is Manager" = "Yes"
+  const employeesWithFeedback = new Set();
+  allCoachingEmails.forEach((email) => {
+    if (hoja1EmailMap.has(email) && hoja1EmailMap.get(email).isManager === false) {
+      employeesWithFeedback.add(email);
+    }
+  });
+
+  // 4. Calculate by country for map
+  // Get all non-manager active employees by country from Hoja1
+  const countryTotalNonManagers = new Map();
+  const countryEmployeesWithFeedback = new Map();
+  
+  hoja1Data.forEach((r) => {
+    const workEmail = (r["Work Email Address"] || "").toString().trim().toLowerCase();
+    const isManager = (r["Is Manager"] || "").toString().trim().toLowerCase();
+    const country = (r["Country"] || "").toString().trim();
+    const status = (r["EMPLOYEE STATUS"] || "").toString().trim().toLowerCase();
+    
+    // Only count non-managers with Active status
+    if (isManager !== "yes" && status === "active" && country) {
+      countryTotalNonManagers.set(country, (countryTotalNonManagers.get(country) || 0) + 1);
+      
+      // Check if this employee has feedback
+      if (allCoachingEmails.has(workEmail)) {
+        countryEmployeesWithFeedback.set(country, (countryEmployeesWithFeedback.get(country) || 0) + 1);
+      }
+    }
+  });
+
+  // Build countries array for map
+  const countries = [];
+  countryTotalNonManagers.forEach((total, country) => {
+    const withFeedback = countryEmployeesWithFeedback.get(country) || 0;
+    const pct = total > 0 ? (withFeedback / total) * 100 : 0;
+    countries.push({
+      country,
+      total,
+      completed: withFeedback,
+      pct
+    });
+  });
+
+  // Calculate overall percentage
+  let totalNonManagers = 0;
+  let totalWithFeedback = 0;
+  countryTotalNonManagers.forEach((val) => totalNonManagers += val);
+  countryEmployeesWithFeedback.forEach((val) => totalWithFeedback += val);
+  const overallPct = totalNonManagers > 0 ? (totalWithFeedback / totalNonManagers) * 100 : 0;
+
   return {
-    feedbackCountries: countries.size,
-    managersUsingForms: managerEmails.size,
-    employeesWithFeedback: employeeEmails.size,
+    employeesInCST: employeesInCST,
+    totalManagers: totalManagers,
+    totalFeedbacks: totalFeedbacks,
+    managersDoingCoaching: managersDoingCoaching.size,
+    employeesWithFeedback: employeesWithFeedback.size,
+    countries: countries,
+    overallPct: overallPct,
+    totalNonManagers: totalNonManagers,
+    totalWithFeedback: totalWithFeedback
   };
 }
 
+let feedbackGaugeChart;
+let feedbackMap;
+let feedbackGeoJsonLayer;
+let feedbackLabelMarkers = [];
+
 function renderFeedbackKpis(kpis) {
-  document.getElementById("fbCountries").textContent =
-    kpis.feedbackCountries.toString();
+  document.getElementById("fbEmployeesInCST").textContent =
+    kpis.employeesInCST.toString();
+  document.getElementById("fbTotalManagers").textContent =
+    kpis.totalManagers.toString();
+  document.getElementById("fbFeedbacks").textContent =
+    kpis.totalFeedbacks.toString();
   document.getElementById("fbManagers").textContent =
-    kpis.managersUsingForms.toString();
+    kpis.managersDoingCoaching.toString();
   document.getElementById("fbEmployees").textContent =
     kpis.employeesWithFeedback.toString();
+
+  renderFeedbackGauge(kpis.overallPct);
+  renderFeedbackMap(kpis.countries);
+}
+
+function renderFeedbackGauge(pct) {
+  const canvas = document.getElementById("feedbackGauge");
+  const ctx = canvas.getContext("2d");
+  const labelEl = document.getElementById("feedbackGaugeLabel");
+  
+  const clamped = Math.max(0, Math.min(100, pct || 0));
+  labelEl.textContent = clamped.toFixed(1) + "%";
+
+  if (feedbackGaugeChart) {
+    feedbackGaugeChart.destroy();
+  }
+
+  feedbackGaugeChart = new Chart(ctx, {
+    type: "doughnut",
+    data: {
+      labels: ["Red", "Orange", "Yellow", "Green"],
+      datasets: [
+        {
+          data: [25, 25, 25, 25],
+          borderWidth: 0,
+          backgroundColor: ["#dc2626", "#f97316", "#facc15", "#22c55e"],
+          circumference: 180,
+          rotation: 270,
+          cutout: "60%",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false },
+      },
+    },
+    plugins: [{
+      id: 'feedbackGaugeNeedle',
+      afterDatasetDraw(chart) {
+        const { ctx, width, height } = chart;
+        const centerX = width / 2;
+        const centerY = height - 10;
+        const radius = Math.min(width, height * 2) / 2 - 10;
+        
+        const angle = Math.PI + (clamped / 100) * Math.PI;
+        const needleLength = radius * 0.85;
+        
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(angle);
+        
+        ctx.beginPath();
+        ctx.moveTo(0, -6);
+        ctx.lineTo(needleLength, 0);
+        ctx.lineTo(0, 6);
+        ctx.fillStyle = "#1f2937";
+        ctx.fill();
+        
+        ctx.restore();
+        
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 8, 0, Math.PI * 2);
+        ctx.fillStyle = "#1f2937";
+        ctx.fill();
+      }
+    }]
+  });
+}
+
+function renderFeedbackMap(countries) {
+  const mapDiv = document.getElementById("feedbackMap");
+
+  if (!feedbackMap) {
+    feedbackMap = L.map(mapDiv, {
+      zoomControl: true,
+      scrollWheelZoom: true
+    }).setView([52.0, 10.0], 4);
+    
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 8,
+      minZoom: 3,
+      attribution: '&copy; OpenStreetMap &copy; CARTO',
+    }).addTo(feedbackMap);
+  }
+
+  if (feedbackGeoJsonLayer) {
+    feedbackMap.removeLayer(feedbackGeoJsonLayer);
+  }
+  feedbackLabelMarkers.forEach(marker => feedbackMap.removeLayer(marker));
+  feedbackLabelMarkers = [];
+
+  const countryDataMap = new Map();
+  countries.forEach(c => {
+    const name = c.country;
+    countryDataMap.set(name, c);
+    
+    if (name === "Czechia") countryDataMap.set("Czech Republic", c);
+    if (name === "Czech Republic") countryDataMap.set("Czechia", c);
+    if (name === "United Kingdom" || name === "UK") {
+      countryDataMap.set("UK", c);
+      countryDataMap.set("United Kingdom", c);
+    }
+    
+    const alias = COUNTRY_NAME_ALIASES[name];
+    if (alias) countryDataMap.set(alias, c);
+  });
+
+  feedbackGeoJsonLayer = L.geoJSON(EUROPE_GEOJSON, {
+    style: function(feature) {
+      const countryName = feature.properties.name;
+      const data = countryDataMap.get(countryName);
+      
+      if (data) {
+        const color = pctToColorFeedback(data.pct || 0);
+        return {
+          fillColor: color,
+          fillOpacity: 0.75,
+          color: "#1a1a2e",
+          weight: 1.5
+        };
+      } else {
+        return {
+          fillColor: "#374151",
+          fillOpacity: 0.5,
+          color: "#1a1a2e",
+          weight: 1
+        };
+      }
+    },
+    onEachFeature: function(feature, layer) {
+      const countryName = feature.properties.name;
+      const data = countryDataMap.get(countryName);
+      
+      if (data) {
+        const pctLabel = data.pct ? data.pct.toFixed(1) : "0.0";
+        layer.bindPopup(
+          `<strong>${data.country}</strong><br/>
+           % w/Feedback: ${pctLabel}%<br/>
+           ${data.completed} of ${data.total} employees`
+        );
+      }
+    }
+  }).addTo(feedbackMap);
+
+  countries.forEach(c => {
+    let countryName = c.country;
+    if (COUNTRY_NAME_ALIASES[countryName]) {
+      countryName = COUNTRY_NAME_ALIASES[countryName];
+    }
+    
+    const coords = COUNTRY_LABEL_COORDS[countryName] || COUNTRY_LABEL_COORDS[c.country];
+    if (!coords) return;
+
+    const displayName = getDisplayName(c.country);
+    
+    const labelIcon = L.divIcon({
+      className: 'country-label',
+      html: `<span>${displayName}</span>`,
+      iconSize: [100, 20],
+      iconAnchor: [50, 10]
+    });
+
+    const marker = L.marker(coords, {
+      icon: labelIcon,
+      interactive: false
+    }).addTo(feedbackMap);
+    
+    feedbackLabelMarkers.push(marker);
+  });
+
+  setTimeout(() => {
+    feedbackMap.invalidateSize();
+  }, 100);
 }
 
 // ===== Bowler View =====
@@ -655,26 +1021,74 @@ const BOWLER_MONTH_KEYS = [
   "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"
 ];
 
-// PY row: keep values as in existing reference (adjust these numbers as needed)
-const BOWLER_PY_2025 = {
-  Jan: 0,
-  Feb: 0,
-  Mar: 0,
-  Apr: 1,
-  May: 0,
-  Jun: 0,
-  Jul: 7,
-  Aug: 0,
-  Sep: 0,
-  Oct: 1,
-  Nov: 0,
-  Dec: 8,
-};
+let bowlerFilterInitialized = false;
+
+function initBowlerFilters() {
+  const countries = new Set();
+  allRows.forEach((r) => {
+    const country = (r["Country"] || "").toString().trim();
+    if (country) countries.add(country);
+  });
+  
+  const sortedCountries = Array.from(countries).sort((a, b) => a.localeCompare(b));
+  populateSelect("filterBowlerCountry", sortedCountries, "All countries");
+
+  document.getElementById("filterBowlerCountry").addEventListener("change", applyBowlerFiltersAndRender);
+
+  document.getElementById("clearBowlerFiltersBtn").addEventListener("click", () => {
+    document.getElementById("filterBowlerCountry").selectedIndex = 0;
+    applyBowlerFiltersAndRender();
+  });
+}
+
+function applyBowlerFiltersAndRender() {
+  const selectedCountry = document.getElementById("filterBowlerCountry").value;
+  
+  let filteredRows = allRows;
+  if (selectedCountry !== "__ALL__") {
+    filteredRows = allRows.filter((r) => {
+      const country = (r["Country"] || "").toString().trim();
+      return country === selectedCountry;
+    });
+  }
+
+  buildBowler(filteredRows);
+}
+
+function parseDate(dateStr) {
+  if (!dateStr) return null;
+  const str = dateStr.toString().trim();
+  if (!str) return null;
+  
+  // Try ISO format (2025-11-11T00:00:00.000Z)
+  const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    return {
+      year: parseInt(isoMatch[1]),
+      month: parseInt(isoMatch[2]) - 1 // 0-indexed
+    };
+  }
+  
+  // Fallback to Date object
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return { year: d.getFullYear(), month: d.getMonth() };
+  }
+  
+  return null;
+}
 
 function buildBowler(rows) {
+  if (!bowlerFilterInitialized && allRows.length) {
+    initBowlerFilters();
+    bowlerFilterInitialized = true;
+  }
+
+  const pyCounts = {};
   const pdCounts = {};
   const actCounts = {};
   BOWLER_MONTH_KEYS.forEach((m) => {
+    pyCounts[m] = 0;
     pdCounts[m] = 0;
     actCounts[m] = 0;
   });
@@ -683,32 +1097,40 @@ function buildBowler(rows) {
     const planRaw = r["PLAN"];
     const actualRaw = r["ACTUAL"];
 
-    if (planRaw) {
-      const d = new Date(planRaw);
-      if (!isNaN(d.getTime()) && d.getFullYear() === 2025) {
-        const key = BOWLER_MONTH_KEYS[d.getMonth()];
+    const planDate = parseDate(planRaw);
+    if (planDate) {
+      if (planDate.year === 2024) {
+        const key = BOWLER_MONTH_KEYS[planDate.month];
+        if (key) pyCounts[key] += 1;
+      } else if (planDate.year === 2025) {
+        const key = BOWLER_MONTH_KEYS[planDate.month];
         if (key) pdCounts[key] += 1;
       }
     }
 
-    if (actualRaw) {
-      const d2 = new Date(actualRaw);
-      if (!isNaN(d2.getTime()) && d2.getFullYear() === 2025) {
-        const key2 = BOWLER_MONTH_KEYS[d2.getMonth()];
-        if (key2) actCounts[key2] += 1;
-      }
+    const actualDate = parseDate(actualRaw);
+    if (actualDate && actualDate.year === 2025) {
+      const key2 = BOWLER_MONTH_KEYS[actualDate.month];
+      if (key2) actCounts[key2] += 1;
     }
   });
 
   // Write into table
   BOWLER_MONTH_KEYS.forEach((m) => {
     const pyCell = document.getElementById(`bowler-py-${m}`);
+    if (pyCell) pyCell.textContent = pyCounts[m] || "-";
+    
     const pdCell = document.getElementById(`bowler-pd-${m}`);
     const actCell = document.getElementById(`bowler-act-${m}`);
+    const pctCell = document.getElementById(`bowler-pct-${m}`);
 
-    if (pyCell) pyCell.textContent = BOWLER_PY_2025[m] || "";
-    if (pdCell) pdCell.textContent = pdCounts[m] ? pdCounts[m].toString() : "";
-    if (actCell) actCell.textContent = actCounts[m] ? actCounts[m].toString() : "";
+    const pd = pdCounts[m] || 0;
+    const act = actCounts[m] || 0;
+    const pct = pd > 0 ? ((act / pd) * 100).toFixed(0) : "-";
+
+    if (pdCell) pdCell.textContent = pd > 0 ? pd.toString() : "";
+    if (actCell) actCell.textContent = act > 0 ? act.toString() : "";
+    if (pctCell) pctCell.textContent = pd > 0 ? pct + "%" : "";
   });
 
   bowlerComputed = true;

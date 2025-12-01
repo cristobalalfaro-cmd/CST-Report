@@ -69,6 +69,13 @@ This script runs on Google's infrastructure, not on Replit.
 Configured as a **static deployment** - all HTML, CSS, and JavaScript files are served directly. The site connects to the external Google Apps Script API for data.
 
 ## Recent Changes
+- **2025-12-01**: Compact layout for single-page view
+  - Reduced tile height from 155px to 120px with smaller fonts
+  - Made filters more compact with smaller padding
+  - Reduced gauge size and adjusted needle positioning
+  - Made bottom charts section fit within viewport height
+  - All CST Report view content now fits on one page without scrolling
+
 - **2025-11-29**: Filter-responsive indicators and map improvements
   - Indicators now reflect filtered data (when filtering by country, all metrics update accordingly)
   - Gauge needle base repositioned above the numbers to prevent overlap
